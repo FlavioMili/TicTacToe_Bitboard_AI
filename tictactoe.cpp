@@ -17,7 +17,7 @@ using Bitboard = uint16_t;
 #define WIN 10
 #define LOSS -10
 
-std::unordered_map<Bitboard, int> NormalisedBoards;
+// std::unordered_map<Bitboard, int> NormalisedBoards;
 
 // Winning positions
 // uint16_t COL1 = 0b100100100;
@@ -40,10 +40,11 @@ array<uint16_t, 8> patterns = {
         0b001010100   // DIA2
 };
 
-bool ChooseWhoStarts() {
-    static std::mt19937 gen{std::random_device{}()};
-    return std::uniform_int_distribution<>(0, 1)(gen) == 0;
-}
+// REMOVE THE COMMENTS ALSO IN THE MAIN IN ORDER TO RANDOMISE THE FIRST PLAYER
+// bool ChooseWhoStarts() {
+//    static std::mt19937 gen{std::random_device{}()};
+//    return std::uniform_int_distribution<>(0, 1)(gen) == 0;
+//}
 
 vector<Bitboard> PossibleMoves(Bitboard board) {
     vector<Bitboard> moves;
