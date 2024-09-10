@@ -1,4 +1,4 @@
-# Tic-Tac-Toe AI with Bitboards
+# Efficient Tic-Tac-Toe AI implemented with Bitboards
 
 This project is a Tic-Tac-Toe AI implemented using bitboards. I developed this AI to learn how to use bitboards and how to use minimax algorithm.
 
