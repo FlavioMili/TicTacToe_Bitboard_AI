@@ -49,5 +49,5 @@ With a mean average of 35691.5 nanoseconds
 With a mean average of 5787.7 nanoseconds
 
 ## Result 
-    My implementation was eventually **6.16 times** faster than tjnorwat's implementation.
+    My implementation was eventually 6.16 times faster than tjnorwat's implementation.
 
