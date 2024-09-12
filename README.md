@@ -11,6 +11,7 @@ The core of this project revolves around utilizing bitboards for efficient board
 - **Bitboard Representation**: Efficient board state management using bitwise operations.
 - **Minimax Algorithm**: Implementation with alpha-beta pruning for optimal move decisions.
 - **Evaluation Function**: Custom evaluation to balance offensive and defensive strategies as managing double threats.
+- **Transposition table**: In the faster version it uses a transposition table and a popcount table to process faster the moves
 
 ## Usage
 
