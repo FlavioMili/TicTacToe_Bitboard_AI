@@ -15,42 +15,34 @@ using Bitboard = uint16_t;
 #define LOSS -10
 
 constexpr array<uint16_t, 8> patterns = {
-    0b100100100,  // COL1
-    0b010010010,  // COL2
-    0b001001001,  // COL3
-    0b111000000,  // ROW1
-    0b000111000,  // ROW2
-    0b000000111,  // ROW3
-    0b100010001,  // DIA1
-    0b001010100   // DIA2
+    0b100100100, 0b010010010, 0b001001001, // COLS
+    0b111000000, 0b000111000, 0b000000111, // ROWS
+    0b100010001, 0b001010100               // DIAGONALS
 };
 
-std::unordered_map<uint32_t, int> TranspositionTable; 
+std::unordered_map<uint64_t, int> TranspositionTable;
 
-constexpr array<int, 512> PopcountTable = []() { // Table of popcounts calculated at compile time
+constexpr array<int, 512> PopcountTable = []() {
     array<int, 512> table{};
-    for (int i = 0; i < 512; ++i) {
-        table[i] = __builtin_popcount(i);
-    }
+    for (int i = 0; i < 512; ++i) table[i] = __builtin_popcount(i);
     return table;
 }();
 
-inline int FastPopcount(uint16_t x) {
-    return PopcountTable[x & 0x1FF];
+inline __attribute__((always_inline)) int FastPopcount(uint16_t x) {
+    return PopcountTable[x & SIGNIFICANT_BITS];
 }
 
-inline int Eval(Bitboard cpu, Bitboard player) {
-    // Check for immediate wins or losses
-    for (auto pattern : patterns) {
+inline __attribute__((always_inline)) int Eval(Bitboard cpu, Bitboard player) {
+    for (const auto& pattern : patterns) {
         if ((player & pattern) == pattern) return LOSS;
         if ((cpu & pattern) == pattern) return WIN;
     }
 
     int score = 0;
-    for (auto pattern : patterns) {
+    for (const auto& pattern : patterns) {
         int cpuCount = FastPopcount(cpu & pattern);
         int playerCount = FastPopcount(player & pattern);
-        
+
         if (cpuCount == 2 && playerCount == 0) score += 3;
         else if (playerCount == 2 && cpuCount == 0) score -= 3;
         else if (cpuCount == 1 && playerCount == 0) score += 1;
@@ -64,8 +56,8 @@ void PrintBoard(Bitboard CPU, Bitboard Player) {
     for (int row = 2; row >= 0; --row) {
         for (int col = 0; col < 3; ++col) {
             int bitIndex = row * 3 + col;
-            if ((CPU >> bitIndex) & 1) cout << " @ " ;
-            else if ((Player >> bitIndex) & 1) cout << " X "; 
+            if ((CPU >> bitIndex) & 1) cout << " @ ";
+            else if ((Player >> bitIndex) & 1) cout << " X ";
             else cout << " . ";
             if (col < 2) cout << "|";
         }
@@ -75,21 +67,17 @@ void PrintBoard(Bitboard CPU, Bitboard Player) {
 }
 
 void PlayerTurn(Bitboard &player, Bitboard cpu, Bitboard &board) {
-    Bitboard free_cells = (~board) & SIGNIFICANT_BITS; // This will let us consider only the free cells
+    Bitboard free_cells = (~board) & SIGNIFICANT_BITS;
+
     cout << "Current board:" << endl;
-    
     for (int row = 2; row >= 0; --row) {
         for (int col = 0; col < 3; ++col) {
             int bitIndex = row * 3 + col;
-            if ((cpu >> bitIndex) & 1) {
-                cout << " @ ";
-            } else if ((player >> bitIndex) & 1) {
-                cout << " X "; 
-            } else {
-                cout << " " << (bitIndex + 1) << " "; 
-            }
+            if ((cpu >> bitIndex) & 1) cout << " @ ";
+            else if ((player >> bitIndex) & 1) cout << " X ";
+            else cout << " " << (bitIndex + 1) << " ";
             if (col < 2) cout << "|";
-        }   
+        }
         cout << endl;
         if (row > 0) cout << "-----------" << endl;
     }
@@ -98,7 +86,7 @@ void PlayerTurn(Bitboard &player, Bitboard cpu, Bitboard &board) {
     int choice;
     std::cin >> choice;
     int move = choice - 1;
-    while (!(free_cells & (1 << move))) {
+    while (!((~board & SIGNIFICANT_BITS) & (1 << move))) {
         cout << "Invalid choice. Choose a free cell: ";
         std::cin >> choice;
         move = choice - 1;
@@ -107,35 +95,35 @@ void PlayerTurn(Bitboard &player, Bitboard cpu, Bitboard &board) {
     board |= (1 << move);
 }
 
-inline int Minimax(Bitboard board, Bitboard cpu, Bitboard player, bool isMaximizing, int alpha, int beta) {
-    uint32_t key = (board << 19) | (cpu << 10) | player | (isMaximizing ? (1 << 9) : 0);
+inline int Minimax(Bitboard board, Bitboard cpu, Bitboard player, bool isMax, int alpha, int beta) {
+    uint64_t key = (static_cast<uint64_t>(board) << 27)
+                 | (static_cast<uint64_t>(cpu) << 18)
+                 | (static_cast<uint64_t>(player) << 9)
+                 | (isMax ? 1 : 0);
     auto it = TranspositionTable.find(key);
-    if (it != TranspositionTable.end()) {
-        return it->second;
+    if (it != TranspositionTable.end()) return it->second;
+
+    int eval = Eval(cpu, player);
+    if (eval == WIN || eval == LOSS || FastPopcount(board) == 9) {
+        TranspositionTable[key] = eval;
+        return eval;
     }
 
-    int score = Eval(cpu, player);
-    if (score == WIN || score == LOSS || FastPopcount(board) == 9) {
-        TranspositionTable[key] = score;
-        return score;
-    }
-
-    int bestScore = isMaximizing ? -1000 : 1000;
+    int bestScore = isMax ? -1000 : 1000;
     Bitboard free = (~board) & SIGNIFICANT_BITS;
 
     while (free) {
-        Bitboard move = free & (-free);
+        int moveIdx = __builtin_ctz(free);
+        Bitboard move = 1 << moveIdx;
         Bitboard newBoard = board | move;
-        
+
         int moveScore;
-        if (isMaximizing) {
-            Bitboard newCpu = cpu | move;
-            moveScore = Minimax(newBoard, newCpu, player, false, alpha, beta);
+        if (isMax) {
+            moveScore = Minimax(newBoard, cpu | move, player, false, alpha, beta);
             bestScore = std::max(bestScore, moveScore);
             alpha = std::max(alpha, bestScore);
         } else {
-            Bitboard newPlayer = player | move;
-            moveScore = Minimax(newBoard, cpu, newPlayer, true, alpha, beta);
+            moveScore = Minimax(newBoard, cpu, player | move, true, alpha, beta);
             bestScore = std::min(bestScore, moveScore);
             beta = std::min(beta, bestScore);
         }
@@ -156,7 +144,8 @@ void CPUTurn(Bitboard &cpu, Bitboard &board, Bitboard player) {
 
     Bitboard free = (~board) & SIGNIFICANT_BITS;
     while (free) {
-        Bitboard move = free & (-free);
+        int moveIdx = __builtin_ctz(free);
+        Bitboard move = 1 << moveIdx;
         Bitboard newCpu = cpu | move;
         Bitboard newBoard = board | move;
 
@@ -164,43 +153,45 @@ void CPUTurn(Bitboard &cpu, Bitboard &board, Bitboard player) {
             bestMove = move;
             break;
         }
-        
+
         int moveScore = Minimax(newBoard, newCpu, player, false, -1000, 1000);
         if (moveScore > bestScore) {
             bestScore = moveScore;
             bestMove = move;
         }
+
         free &= (free - 1);
     }
 
     auto end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsed_time = end - start;
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    auto sec = std::chrono::duration<double>(end - start).count();
 
-    std::cout << "Search time (nanoseconds): " << std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed_time).count() << std::endl;
-    std::cout << "Search time (seconds): " << elapsed_time.count() << std::endl;
+    cout << "Search time (nanoseconds): " << ns << endl;
+    cout << "Search time (seconds): " << sec << endl;
+
     cpu |= bestMove;
     board |= bestMove;
 }
 
 int main() {
-    Bitboard board = 0b000000000; // Occupied cells
-    Bitboard CPU = 0b000000000;   // Board of the cells occupied by the computer
-    Bitboard Player = 0b000000000;// Board of the cells occupied by the player
+    TranspositionTable.reserve(20000);
 
-    int c = 0; // Number of turns
-    bool turn = 0; // In this program the cpu will play first so that it can be directly compared to the benchmark program
+    Bitboard board = 0, CPU = 0, Player = 0;
+    int c = 0;
+    bool turn = 0;
 
     while (c < 9) {
         if (turn) {
             PlayerTurn(Player, CPU, board);
-            if (Eval(CPU, Player) == LOSS) { // Check if player wins
+            if (Eval(CPU, Player) == LOSS) {
                 PrintBoard(CPU, Player);
                 cout << "The player has won!" << endl;
                 return 0;
             }
         } else {
             CPUTurn(CPU, board, Player);
-            if (Eval(CPU, Player) == WIN) { // Check if CPU wins
+            if (Eval(CPU, Player) == WIN) {
                 PrintBoard(CPU, Player);
                 cout << "The computer has won!" << endl;
                 return 0;
@@ -209,9 +200,11 @@ int main() {
         turn = !turn;
         c++;
     }
+
     if (FastPopcount(board) == 9) {
         PrintBoard(CPU, Player);
         cout << "Draw!" << endl;
     }
+
     return 0;
 }
